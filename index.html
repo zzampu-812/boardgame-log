@@ -317,7 +317,7 @@
                 <input type="checkbox" onchange="toggleCheck(${game.id}, this.checked)" ${record.checked ? 'checked' : ''}>
                 플레이 완료
               </label>
-              <input type="text" class="memo-input" maxlength="20" placeholder="메모 (20자 이내)" 
+              <input type="text" class="memo-input" maxlength="20" placeholder="개인메모 (20자 이내)" 
                 value="${record.memo}" 
                 ${record.checked ? '' : 'disabled'}
                 onchange="updateMemo(${game.id}, this.value)">
