@@ -164,31 +164,33 @@
 
   <!-- 탭 4: 게임 등록하기 -->
   <div id="tab-add" class="tab-content">
-    <div class="form-card">
-      <h3>🎲 새 게임 등록</h3>
-      <div class="form-group">
-        <label>게임 이름 *</label>
-        <input type="text" id="newTitle" placeholder="예: 웬디, 어른이 되렴">
-      </div>
-      <div class="form-group">
-        <label>소요 시간</label>
-        <input type="text" id="newTime" placeholder="예: 120">
-      </div>
-      <div class="form-group">
-        <label>인원수</label>
-        <input type="text" id="newPlayers" placeholder="예: 4, 6~7">
-      </div>
-      <div class="form-group">
-  <label>담당 GM (진행자) *</label>
-  <input type="text" id="newGm" placeholder="예: 민수 또는 민수, 영희 (여러 명은 쉼표로 구분)">
-</div>
-      <div class="form-group">
-        <label>썸네일 이미지 주소(URL)</label>
-        <input type="text" id="newImg" placeholder="https://... (비워두면 기본 이미지)">
-      </div>
-      <button class="btn-submit" onclick="addNewGame()">게임 등록하기</button>
+  <div class="form-card">
+    <h3 id="formTitle">🎲 새 게임 등록</h3>
+    <input type="hidden" id="editGameId" value="">
+    <div class="form-group">
+      <label>게임 이름 *</label>
+      <input type="text" id="newTitle" placeholder="예: 웬디, 어른이 되렴">
     </div>
+    <div class="form-group">
+      <label>소요 시간 (분 단위 숫자만 입력) *</label>
+      <input type="number" id="newTime" placeholder="예: 60">
+    </div>
+    <div class="form-group">
+      <label>인원수 (예: 4 또는 4~5) *</label>
+      <input type="text" id="newPlayers" placeholder="예: 4 또는 3~5">
+    </div>
+    <div class="form-group">
+      <label>담당 GM (여러 명은 쉼표 구분) *</label>
+      <input type="text" id="newGm" placeholder="예: 민수, 영희">
+    </div>
+    <div class="form-group">
+      <label>썸네일 이미지 주소(URL)</label>
+      <input type="text" id="newImg" placeholder="https://... (비워두면 기본 이미지)">
+    </div>
+    <button class="btn-submit" id="submitGameBtn" onclick="saveGameData()">게임 등록하기</button>
+    <button type="button" id="cancelEditBtn" onclick="cancelEdit()" style="display: none; width: 100%; margin-top: 8px; padding: 10px; background: #e2e8f0; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">수정 취소</button>
   </div>
+</div>
 
   <script>
 
@@ -334,64 +336,71 @@
 
     // 2. 카드 HTML 템플릿
     function createCardHTML(game) {
-      const record = userRecords[game.id] || { checked: false, memo: "" };
-      const defaultImg = "https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?w=150";
-      
-      const formattedTime = game.play_time ? `${game.play_time}m+` : '';
-      const formattedPlayers = game.players ? `${game.players}인` : '';
+  const record = userRecords[game.id] || { checked: false, memo: "" };
+  const defaultImg = "https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?w=150";
+  
+  const formattedTime = game.play_time ? `${game.play_time}m+` : '';
+  const formattedPlayers = game.players ? `${game.players}인` : '';
 
-      const timeBadge = formattedTime ? `<span class="badge badge-time">⏱ ${formattedTime}</span>` : '';
-      const playerBadge = formattedPlayers ? `<span class="badge badge-players">👥 ${formattedPlayers}</span>` : '';
+  const timeBadge = formattedTime ? `<span class="badge badge-time">⏱ ${formattedTime}</span>` : '';
+  const playerBadge = formattedPlayers ? `<span class="badge badge-players">👥 ${formattedPlayers}</span>` : '';
 
-      const isStaff = currentUser && (currentUser.role === 'gm' || currentUser.role === 'admin');
-      const gmBadge = (isStaff && game.gm_name) ? `<span class="badge badge-gm">👑 GM: ${game.gm_name}</span>` : '';
+  const isStaff = currentUser && (currentUser.role === 'gm' || currentUser.role === 'admin');
+  const gmBadge = (isStaff && game.gm_name) ? `<span class="badge badge-gm">👑 GM: ${game.gm_name}</span>` : '';
 
-      // [추가] GM/관리자용 플레이 완료 유저 명단 HTML 생성
-      let playedUsersHTML = '';
-      if (isStaff) {
-        const playersWhoPlayed = allGamePlayers[game.id] || [];
-        if (playersWhoPlayed.length > 0) {
-          const tags = playersWhoPlayed.map(name => `<span class="player-tag">${name}</span>`).join('');
-          playedUsersHTML = `
-            <div class="player-list-box">
-              <div class="player-list-title">🎮 플레이 완료 유저 (${playersWhoPlayed.length}명)</div>
-              <div>${tags}</div>
-            </div>
-          `;
-        } else {
-          playedUsersHTML = `
-            <div class="player-list-box">
-              <div class="player-list-title" style="color:#94a3b8;">🎮 아직 플레이한 유저가 없습니다.</div>
-            </div>
-          `;
-        }
-      }
+  // [추가] 내가 담당 GM이거나 관리자일 때 수정 권한 부여
+  const gmList = (game.gm_name || "").split(',').map(s => s.trim());
+  const canEdit = currentUser && (currentUser.role === 'admin' || gmList.includes(currentUser.nickname));
+  const editBtn = canEdit ? `<button onclick="startEditGame(${game.id})" style="font-size: 11px; padding: 2px 6px; border: 1px solid #cbd5e1; background: #fff; border-radius: 4px; cursor: pointer; color: #475569;">✏️ 수정</button>` : '';
 
-      return `
-        <div class="game-card">
-          <img class="game-thumb" src="${game.img_url || defaultImg}" loading="lazy" alt="${game.title}" onerror="this.src='${defaultImg}'">
-          <div class="game-info">
-            <div class="game-title">${game.title}</div>
-            <div class="game-badges">
-              ${timeBadge}
-              ${playerBadge}
-              ${gmBadge}
-            </div>
-            <div class="game-action">
-              <label class="check-label">
-                <input type="checkbox" onchange="toggleCheck(${game.id}, this.checked)" ${record.checked ? 'checked' : ''}>
-                플레이 완료
-              </label>
-              <input type="text" class="memo-input" maxlength="20" placeholder="메모 (20자 이내)" 
-                value="${record.memo}" 
-                ${record.checked ? '' : 'disabled'}
-                onchange="updateMemo(${game.id}, this.value)">
-            </div>
-            ${playedUsersHTML}
-          </div>
+  let playedUsersHTML = '';
+  if (isStaff) {
+    const playersWhoPlayed = allGamePlayers[game.id] || [];
+    if (playersWhoPlayed.length > 0) {
+      const tags = playersWhoPlayed.map(name => `<span class="player-tag">${name}</span>`).join('');
+      playedUsersHTML = `
+        <div class="player-list-box">
+          <div class="player-list-title">🎮 플레이 완료 유저 (${playersWhoPlayed.length}명)</div>
+          <div>${tags}</div>
+        </div>
+      `;
+    } else {
+      playedUsersHTML = `
+        <div class="player-list-box">
+          <div class="player-list-title" style="color:#94a3b8;">🎮 아직 플레이한 유저가 없습니다.</div>
         </div>
       `;
     }
+  }
+
+  return `
+    <div class="game-card">
+      <img class="game-thumb" src="${game.img_url || defaultImg}" loading="lazy" alt="${game.title}" onerror="this.src='${defaultImg}'">
+      <div class="game-info">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <div class="game-title">${game.title}</div>
+          ${editBtn}
+        </div>
+        <div class="game-badges">
+          ${timeBadge}
+          ${playerBadge}
+          ${gmBadge}
+        </div>
+        <div class="game-action">
+          <label class="check-label">
+            <input type="checkbox" onchange="toggleCheck(${game.id}, this.checked)" ${record.checked ? 'checked' : ''}>
+            플레이 완료
+          </label>
+          <input type="text" class="memo-input" maxlength="20" placeholder="메모 (20자 이내)" 
+            value="${record.memo}" 
+            ${record.checked ? '' : 'disabled'}
+            onchange="updateMemo(${game.id}, this.value)">
+        </div>
+        ${playedUsersHTML}
+      </div>
+    </div>
+  `;
+}
 
     // 3. 화면 렌더링 함수
     function renderList(list, targetId) {
@@ -475,7 +484,46 @@
     }
 
      // 6. 새 게임 등록 (GM 닉네임 유효성 검사 추가)
-    async function addNewGame() {
+    // 6. 수정 모드 진입 및 취소 함수
+    function startEditGame(gameId) {
+      const game = gamesList.find(g => g.id === gameId);
+      if (!game) return;
+
+      document.getElementById('editGameId').value = game.id;
+      document.getElementById('newTitle').value = game.title;
+      document.getElementById('newTime').value = game.play_time;
+      document.getElementById('newPlayers').value = game.players;
+      document.getElementById('newGm').value = game.gm_name;
+      document.getElementById('newImg').value = game.img_url || '';
+
+      document.getElementById('formTitle').innerText = '✏️ 게임 정보 수정';
+      document.getElementById('submitGameBtn').innerText = '게임 정보 수정하기';
+      document.getElementById('cancelEditBtn').style.display = 'block';
+
+      switchTab('add');
+    }
+
+    function cancelEdit() {
+      clearAddForm();
+      switchTab('list');
+    }
+
+    function clearAddForm() {
+      document.getElementById('editGameId').value = '';
+      document.getElementById('newTitle').value = '';
+      document.getElementById('newTime').value = '';
+      document.getElementById('newPlayers').value = '';
+      document.getElementById('newGm').value = '';
+      document.getElementById('newImg').value = '';
+
+      document.getElementById('formTitle').innerText = '🎲 새 게임 등록';
+      document.getElementById('submitGameBtn').innerText = '게임 등록하기';
+      document.getElementById('cancelEditBtn').style.display = 'none';
+    }
+
+    // 7. 게임 등록 및 수정 처리 함수 (등록/수정 공용)
+    async function saveGameData() {
+      const editId = document.getElementById('editGameId').value;
       const title = document.getElementById('newTitle').value.trim();
       const play_time = document.getElementById('newTime').value.trim();
       const players = document.getElementById('newPlayers').value.trim();
@@ -507,19 +555,19 @@
         return;
       }
 
-      // [추가] 1. 동일한 이름의 게임이 이미 등록되어 있는지 확인
+      // 1. 중복 게임명 검사 (신규 등록이거나 다른 게임과 이름이 겹치는 경우 방지)
       const { data: existingGame } = await db
         .from('games')
         .select('id, title')
         .eq('title', title)
         .maybeSingle();
 
-      if (existingGame) {
+      if (existingGame && (!editId || existingGame.id !== parseInt(editId))) {
         alert(`이미 등록되어 있는 게임 이름입니다: '${title}'\n다른 이름을 사용하거나 기존 등록 내용을 확인해주세요.`);
         return;
       }
 
-      // 2. 입력된 모든 GM 닉네임 유효성 검사
+      // 2. GM 닉네임 검사
       const gmList = gm_input.split(',').map(name => name.trim()).filter(name => name.length > 0);
 
       const { data: foundUsers } = await db
@@ -536,35 +584,38 @@
       }
 
       const cleanGmNames = gmList.join(', ');
+      const payload = { 
+        title, 
+        play_time, 
+        players: players.replace(/\s+/g, ''), 
+        gm_name: cleanGmNames, 
+        img_url 
+      };
 
-      // 3. 게임 정보 DB 등록
-      const { error } = await db.from('games').insert([
-        { 
-          title, 
-          play_time, 
-          players: players.replace(/\s+/g, ''), 
-          gm_name: cleanGmNames, 
-          img_url 
+      if (editId) {
+        // [수정 모드] 기존 게임 업데이트
+        const { error } = await db.from('games').update(payload).eq('id', parseInt(editId));
+        if (error) {
+          alert("게임 수정 실패: " + error.message);
+        } else {
+          alert(`'${title}' 게임 정보가 성공적으로 수정되었습니다!`);
+          clearAddForm();
+          await fetchGames();
+          switchTab('list');
         }
-      ]);
-
-      if (error) {
-        alert("게임 등록 실패: " + error.message);
       } else {
-        alert(`'${title}' 게임이 등록되었습니다! (담당 GM: ${cleanGmNames})`);
-        clearAddForm();
-        await fetchGames();
-        switchTab('list');
+        // [등록 모드] 새 게임 추가
+        const { error } = await db.from('games').insert([payload]);
+        if (error) {
+          alert("게임 등록 실패: " + error.message);
+        } else {
+          alert(`'${title}' 게임이 등록되었습니다! (담당 GM: ${cleanGmNames})`);
+          clearAddForm();
+          await fetchGames();
+          switchTab('list');
+        }
       }
     }
-
-function clearAddForm() {
-  document.getElementById('newTitle').value = '';
-  document.getElementById('newTime').value = '';
-  document.getElementById('newPlayers').value = '';
-  document.getElementById('newGm').value = '';
-  document.getElementById('newImg').value = '';
-}
     
     // 권한에 따라 게임 등록 탭을 보이거나 숨기는 함수
     function updateRoleUI(role) {
