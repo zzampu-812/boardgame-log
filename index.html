@@ -270,7 +270,10 @@
         if (!allGamePlayers[row.game_id]) {
           allGamePlayers[row.game_id] = [];
         }
-        allGamePlayers[row.game_id].push(row.nickname);
+        // 이미 명단에 들어있는 닉네임이 아닐 때만 추가 (중복 방지)
+        if (!allGamePlayers[row.game_id].includes(row.nickname)) {
+          allGamePlayers[row.game_id].push(row.nickname);
+        }
       });
     }
   } else {
