@@ -435,11 +435,22 @@
         return;
       }
 
-      // 쉼표(,)를 기준으로 쪼개고 앞뒤 공백 제거
+      // [추가] 1. 동일한 이름의 게임이 이미 등록되어 있는지 확인
+      const { data: existingGame } = await db
+        .from('games')
+        .select('id, title')
+        .eq('title', title)
+        .maybeSingle();
+
+      if (existingGame) {
+        alert(`이미 등록되어 있는 게임 이름입니다: '${title}'\n다른 이름을 사용하거나 기존 등록 내용을 확인해주세요.`);
+        return;
+      }
+
+      // 2. 입력된 모든 GM 닉네임 유효성 검사
       const gmList = gm_input.split(',').map(name => name.trim()).filter(name => name.length > 0);
 
-      // 입력된 모든 GM 닉네임이 users 테이블에 존재하는지 확인
-      const { data: foundUsers, error: gmCheckError } = await db
+      const { data: foundUsers } = await db
         .from('users')
         .select('nickname')
         .in('nickname', gmList);
@@ -452,9 +463,9 @@
         return;
       }
 
-      // DB에 쉼표로 깔끔하게 정돈해서 저장 (예: "민수, 영희")
       const cleanGmNames = gmList.join(', ');
 
+      // 3. 게임 정보 DB 등록
       const { error } = await db.from('games').insert([
         { 
           title, 
