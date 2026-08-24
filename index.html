@@ -113,8 +113,8 @@
   <!-- 상단 4개 탭 -->
   <div class="tab-container">
     <button class="tab-btn active" onclick="switchTab('search')">게임 찾기</button>
-    <button class="tab-btn" onclick="switchTab('list')">목록 보기</button>
-    <button class="tab-btn" onclick="switchTab('my')">내 게임</button>
+    <button class="tab-btn" onclick="switchTab('list')">플레이❌ 게임</button>
+    <button class="tab-btn" onclick="switchTab('my')">플레이⭕ 게임</button>
     <button class="tab-btn" id="tab-btn-add" onclick="switchTab('add')" style="display: none;">+ 게임 등록</button>  
   </div>
 
@@ -338,7 +338,10 @@
     }
 
     function renderAll() {
-      renderList(gamesList, 'allGameList');
+      // 체크되지 않은 게임만 걸러내기
+      const uncheckedGames = gamesList.filter(g => !userRecords[g.id] || !userRecords[g.id].checked);
+      
+      renderList(uncheckedGames, 'allGameList');
       handleSearch();
       renderMyGames();
     }
