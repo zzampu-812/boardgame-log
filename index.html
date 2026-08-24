@@ -343,9 +343,29 @@
       const timeBadge = formattedTime ? `<span class="badge badge-time">⏱ ${formattedTime}</span>` : '';
       const playerBadge = formattedPlayers ? `<span class="badge badge-players">👥 ${formattedPlayers}</span>` : '';
 
-      // [수정] 로그인한 유저가 GM 또는 admin일 때만 GM 뱃지 노출
       const isStaff = currentUser && (currentUser.role === 'gm' || currentUser.role === 'admin');
       const gmBadge = (isStaff && game.gm_name) ? `<span class="badge badge-gm">👑 GM: ${game.gm_name}</span>` : '';
+
+      // [추가] GM/관리자용 플레이 완료 유저 명단 HTML 생성
+      let playedUsersHTML = '';
+      if (isStaff) {
+        const playersWhoPlayed = allGamePlayers[game.id] || [];
+        if (playersWhoPlayed.length > 0) {
+          const tags = playersWhoPlayed.map(name => `<span class="player-tag">${name}</span>`).join('');
+          playedUsersHTML = `
+            <div class="player-list-box">
+              <div class="player-list-title">🎮 플레이 완료 유저 (${playersWhoPlayed.length}명)</div>
+              <div>${tags}</div>
+            </div>
+          `;
+        } else {
+          playedUsersHTML = `
+            <div class="player-list-box">
+              <div class="player-list-title" style="color:#94a3b8;">🎮 아직 플레이한 유저가 없습니다.</div>
+            </div>
+          `;
+        }
+      }
 
       return `
         <div class="game-card">
@@ -367,6 +387,7 @@
                 ${record.checked ? '' : 'disabled'}
                 onchange="updateMemo(${game.id}, this.value)">
             </div>
+            ${playedUsersHTML}
           </div>
         </div>
       `;
