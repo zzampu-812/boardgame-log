@@ -360,7 +360,8 @@
 
     // 4. 검색
     function handleSearch() {
-      const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+      // 검색어에서 모든 공백(띄어쓰기)을 제거하고 소문자로 변환
+      const keyword = document.getElementById('searchInput').value.replace(/\s+/g, '').toLowerCase();
       const playerInput = document.getElementById('playerFilter').value.trim();
       const timeInput = document.getElementById('timeFilter').value.trim();
 
@@ -368,10 +369,11 @@
       const maxTime = timeInput ? parseInt(timeInput) : null;
 
       const filtered = gamesList.filter(game => {
-        // 1. 게임 제목 검색
-        const matchesTitle = game.title.toLowerCase().includes(keyword);
+        // [수정] 게임 제목에서도 모든 공백(띄어쓰기)을 제거하고 검색어 포함 여부 비교
+        const cleanTitle = game.title.replace(/\s+/g, '').toLowerCase();
+        const matchesTitle = cleanTitle.includes(keyword);
 
-        // 2. 인원수 직접 입력 매칭
+        // 인원수 매칭
         let matchesPlayer = true;
         if (targetPlayer !== null && game.players) {
           if (game.players.includes('~')) {
@@ -384,7 +386,7 @@
           }
         }
 
-        // 3. 소요시간 직접 입력 매칭 (입력한 시간 이하인 게임 검색)
+        // 소요시간 매칭
         let matchesTime = true;
         if (maxTime !== null && game.play_time) {
           const gameTime = parseInt(game.play_time);
