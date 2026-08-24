@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>보드게임 기록장</title>
+  <!-- Supabase 라이브러리 불러오기 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: #f4f6f8; color: #333; padding: 16px; max-width: 600px; margin: 0 auto; }
+    
+    /* 사용자 계정 영역 */
+    .user-auth-card { background: #fff; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .user-auth-card h2 { font-size: 15px; margin-bottom: 10px; color: #222; }
+    .input-row { display: flex; gap: 8px; margin-bottom: 8px; }
+    .input-row input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+    .btn-group { display: flex; gap: 8px; }
+    .btn { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-secondary { background: #e5e7eb; color: #374151; }
+
+    /* 상단 4개 탭 */
+    .tab-container { display: flex; background: #e5e7eb; border-radius: 10px; padding: 4px; margin-bottom: 16px; }
+    .tab-btn { flex: 1; padding: 10px 2px; border: none; background: transparent; font-size: 13px; font-weight: 600; color: #6b7280; border-radius: 8px; cursor: pointer; text-align: center; }
+    .tab-btn.active { background: #fff; color: #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+
+    /* 탭 콘텐츠 공통 */
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* 검색창 */
+    .search-box { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 15px; margin-bottom: 16px; }
+
+    /* 게임 카드 리스트 */
+    .game-grid { display: flex; flex-direction: column; gap: 12px; }
+    .game-card { background: #fff; border-radius: 12px; padding: 12px; display: flex; gap: 12px; align-items: center; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
+    .game-thumb { width: 80px; height: 80px; border-radius: 8px; object-fit: cover; background: #eee; flex-shrink: 0; }
+    .game-info { flex: 1; min-width: 0; }
+    .game-title { font-size: 15px; font-weight: bold; margin-bottom: 4px; color: #111; }
+    
+    /* 태그 (소요시간, 인원수, GM 등) */
+    .game-badges { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+    .badge { font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
+    .badge-time { background: #e0f2fe; color: #0369a1; }
+    .badge-players { background: #fef3c7; color: #b45309; }
+    .badge-gm { background: #f3e8ff; color: #7e22ce; }
+
+    /* 체크 및 20자 메모 영역 */
+    .game-action { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+    .check-label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .memo-input { width: 100%; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+    .memo-input:disabled { background: #f9fafb; color: #9ca3af; }
+    
+    /* 게임 등록 폼 스타일 */
+    .form-card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .form-card h3 { font-size: 16px; margin-bottom: 12px; color: #222; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #4b5563; }
+    .form-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+    .btn-submit { width: 100%; padding: 12px; background: #10b981; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; }
+
+    /* 빈 상태 안내 */
+    .empty-state { text-align: center; padding: 40px 20px; color: #888; font-size: 14px; }
+
+    /* 비밀번호 보안 경고 문구 스타일 */
+.security-notice {
+  font-size: 11px;
+  color: #ef4444;
+  background-color: #fef2f2;
+  border-left: 3px solid #ef4444;
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.btn-guide {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 8px;
+  line-height: 1.4;
+}
+.btn-guide p {
+  margin-bottom: 2px;
+}
+
+  </style>
+</head>
+<body>
+
+  <!-- 참가자 기록 연동 -->
+  <div class="user-auth-card">
+  <h2>👤 참가자 기록 연동</h2>
+  <div class="security-notice">
+    ⚠️본인 확인용 간이 비밀번호(숫자 4자리 등)를 사용해 주세요. <u>평소 사용하는 중요한 비밀번호는 절대 입력하지 마세요.</u>
+  </div>
+ <div class="input-row">
+    <input type="text" id="nickname" placeholder="닉네임 입력">
+    <input type="password" id="password" placeholder="간이 비밀번호(예: 1234)">
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-secondary" onclick="loadUserRecords()">기록 불러오기</button>
+    <button class="btn btn-primary" onclick="saveUserRecords()">기록 저장하기</button>
+  </div>
+  <!-- 버튼 설명 추가 -->
+  <div class="btn-guide">
+    <p>• <strong>기록 불러오기:</strong> 첫 접속 시 내 체크/메모 내역 가져오기</p>
+    <p>• <strong>기록 저장하기:</strong> 게임 플레이 체크 및 메모 작성 후 서버에 최종 저장</p>
+  </div>
+</div>
+
+  <!-- 상단 4개 탭 -->
+  <div class="tab-container">
+    <button class="tab-btn active" onclick="switchTab('search')">게임 찾기</button>
+    <button class="tab-btn" onclick="switchTab('list')">목록 보기</button>
+    <button class="tab-btn" onclick="switchTab('my')">내 게임</button>
+    <button class="tab-btn" id="tab-btn-add" onclick="switchTab('add')" style="display: none;">+ 게임 등록</button>  
+  </div>
+
+  <!-- 탭 1: 게임 찾기 -->
+  <div id="tab-search" class="tab-content active">
+  <input type="text" class="search-box" id="searchInput" placeholder="게임 이름 검색..." oninput="handleSearch()">
+  <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+    <input type="number" class="search-box" id="playerFilter" placeholder="👥 인원수 (예: 4)" style="margin-bottom:0;" oninput="handleSearch()">
+    <input type="number" class="search-box" id="timeFilter" placeholder="⏱ 최대 분 (예: 60)" style="margin-bottom:0;" oninput="handleSearch()">
+  </div>
+  <div class="game-grid" id="searchResultList"></div>
+</div>
+
+  <!-- 탭 2: 게임 목록 보기 -->
+  <div id="tab-list" class="tab-content">
+    <div class="game-grid" id="allGameList"></div>
+  </div>
+
+  <!-- 탭 3: 내 게임 보기 -->
+  <div id="tab-my" class="tab-content">
+    <div class="game-grid" id="myGameList"></div>
+  </div>
+
+  <!-- 탭 4: 게임 등록하기 -->
+  <div id="tab-add" class="tab-content">
+    <div class="form-card">
+      <h3>🎲 새 게임 등록</h3>
+      <div class="form-group">
+        <label>게임 이름 *</label>
+        <input type="text" id="newTitle" placeholder="예: 웬디, 어른이 되렴">
+      </div>
+      <div class="form-group">
+        <label>소요 시간</label>
+        <input type="text" id="newTime" placeholder="예: 120">
+      </div>
+      <div class="form-group">
+        <label>인원수</label>
+        <input type="text" id="newPlayers" placeholder="예: 4, 6~7">
+      </div>
+      <div class="form-group">
+  <label>담당 GM (진행자) *</label>
+  <input type="text" id="newGm" placeholder="예: 민수 또는 민수, 영희 (여러 명은 쉼표로 구분)">
+</div>
+      <div class="form-group">
+        <label>썸네일 이미지 주소(URL)</label>
+        <input type="text" id="newImg" placeholder="https://... (비워두면 기본 이미지)">
+      </div>
+      <button class="btn-submit" onclick="addNewGame()">게임 등록하기</button>
+    </div>
+  </div>
+
+  <script>
+
+    const SUPABASE_URL = "https://jawflzndmfvnryzukxwe.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_GTsU40BxXanIkySL2K9SSg_-qN4pjSZ";
+
+    
+    let currentUser = null; // 로그인한 유저 정보 보관 ({ nickname, role })
+    
+    let db = null;
+   if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+  db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} 
+    let gamesList = [];
+    let userRecords = {}; 
+
+
+  // 1. 유저 로그인 및 기록 불러오기 함수
+    async function loadUserRecords() {
+      const nick = document.getElementById('nickname').value.trim();
+      const pw = document.getElementById('password').value.trim();
+
+      if (!nick || !pw) {
+        alert("닉네임과 비밀번호를 모두 입력해주세요.");
+        return;
+      }
+
+      if (!db) {
+        alert("Supabase 키를 먼저 연결해주세요.");
+        return;
+      }
+
+      // users 테이블에서 유저 조회
+      const { data: user, error: userError } = await db
+        .from('users')
+        .select('*')
+        .eq('nickname', nick)
+        .single();
+
+      if (!user) {
+        // 미등록 유저면 새로 생성 (기본 권한: user)
+        await db.from('users').insert([{ nickname: nick, password: pw, role: 'user' }]);
+        currentUser = { nickname: nick, role: 'user' };
+        updateRoleUI('user');
+        alert(`[${nick}] 신규 참가자로 등록되었습니다.`);
+      } else {
+        // 등록 유저라면 비밀번호 확인
+        if (user.password !== pw) {
+          alert("비밀번호가 일치하지 않습니다.");
+          return;
+        }
+        currentUser = user;
+        updateRoleUI(user.role);
+        alert(`[${nick}]님 환영합니다! (${user.role === 'gm' ? 'GM 권한' : user.role === 'admin' ? '관리자 권한' : '일반 참가자'})`);
+      }
+
+      // 플레이 체크/메모 기록 가져오기
+      const { data: recordsData } = await db.from('records').select('*').eq('nickname', nick);
+      userRecords = {};
+      if (recordsData) {
+        recordsData.forEach(row => {
+          userRecords[row.game_id] = { checked: true, memo: row.memo || "" };
+        });
+      }
+
+      renderAll();
+    }
+
+    // 2. 플레이 체크 및 메모 저장 함수
+    async function saveUserRecords() {
+      const nick = document.getElementById('nickname').value.trim();
+      const pw = document.getElementById('password').value.trim();
+
+      if (!nick || !pw) {
+        alert("닉네임과 비밀번호를 모두 입력해주세요.");
+        return;
+      }
+
+      if (!db) {
+        alert("Supabase 키를 먼저 연결해주세요.");
+        return;
+      }
+
+      // 기존 기록 삭제 후 재등록
+      await db.from('records').delete().eq('nickname', nick).eq('password', pw);
+
+      const rowsToInsert = [];
+      for (const gameId in userRecords) {
+        if (userRecords[gameId].checked) {
+          rowsToInsert.push({
+            nickname: nick,
+            password: pw,
+            game_id: parseInt(gameId),
+            memo: userRecords[gameId].memo || ""
+          });
+        }
+      }
+
+      if (rowsToInsert.length > 0) {
+        const { error } = await db.from('records').insert(rowsToInsert);
+        if (error) {
+          alert("저장 중 오류 발생: " + error.message);
+          return;
+        }
+      }
+      alert(`[${nick}]님의 기록이 안전하게 저장되었습니다!`);
+    }
+
+
+    // 1. 초기 게임 목록 불러오기
+    async function fetchGames() {
+      if (!db) {
+        gamesList = [
+          { id: 1, title: "스플렌더", play_time: "30분", players: "2~4인", gm_name: "민수", created_by: "철수", img_url: "https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?w=150" },
+          { id: 2, title: "카탄", play_time: "60~90분", players: "3~4인", gm_name: "영희", created_by: "영희", img_url: "https://images.unsplash.com/photo-1606167668584-78701c57f13d?w=150" }
+        ];
+        renderAll();
+        return;
+      }
+
+      const { data, error } = await db.from('games').select('*').order('id', { ascending: true });
+      if (error) {
+        alert("게임 목록을 불러오지 못했습니다: " + error.message);
+      } else {
+        gamesList = data || [];
+        renderAll();
+      }
+    }
+
+    // 2. 카드 HTML 템플릿
+    function createCardHTML(game) {
+      const record = userRecords[game.id] || { checked: false, memo: "" };
+      const defaultImg = "https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?w=150";
+      const timeBadge = game.play_time ? `<span class="badge badge-time">⏱ ${game.play_time}</span>` : '';
+      const playerBadge = game.players ? `<span class="badge badge-players">👥 ${game.players}</span>` : '';
+      const gmBadge = game.gm_name ? `<span class="badge badge-gm">👑 GM: ${game.gm_name}</span>` : '';
+
+      return `
+        <div class="game-card">
+          <img class="game-thumb" src="${game.img_url || defaultImg}" loading="lazy" alt="${game.title}" onerror="this.src='${defaultImg}'">
+          <div class="game-info">
+            <div class="game-title">${game.title}</div>
+            <div class="game-badges">
+              ${timeBadge}
+              ${playerBadge}
+              ${gmBadge}
+            </div>
+            <div class="game-action">
+              <label class="check-label">
+                <input type="checkbox" onchange="toggleCheck(${game.id}, this.checked)" ${record.checked ? 'checked' : ''}>
+                플레이 완료
+              </label>
+              <input type="text" class="memo-input" maxlength="20" placeholder="메모 (20자 이내)" 
+                value="${record.memo}" 
+                ${record.checked ? '' : 'disabled'}
+                onchange="updateMemo(${game.id}, this.value)">
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // 3. 화면 렌더링 함수
+    function renderList(list, targetId) {
+      const target = document.getElementById(targetId);
+      if (list.length === 0) {
+        target.innerHTML = '<div class="empty-state">해당하는 게임이 없습니다.</div>';
+        return;
+      }
+      target.innerHTML = list.map(g => createCardHTML(g)).join('');
+    }
+
+    function renderAll() {
+      renderList(gamesList, 'allGameList');
+      handleSearch();
+      renderMyGames();
+    }
+
+    function renderMyGames() {
+      const myGames = gamesList.filter(g => userRecords[g.id] && userRecords[g.id].checked);
+      renderList(myGames, 'myGameList');
+    }
+
+    // 4. 검색
+    function handleSearch() {
+      const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+      const playerInput = document.getElementById('playerFilter').value.trim();
+      const timeInput = document.getElementById('timeFilter').value.trim();
+
+      const targetPlayer = playerInput ? parseInt(playerInput) : null;
+      const maxTime = timeInput ? parseInt(timeInput) : null;
+
+      const filtered = gamesList.filter(game => {
+        // 1. 게임 제목 검색
+        const matchesTitle = game.title.toLowerCase().includes(keyword);
+
+        // 2. 인원수 직접 입력 매칭
+        let matchesPlayer = true;
+        if (targetPlayer !== null && game.players) {
+          if (game.players.includes('~')) {
+            const parts = game.players.split('~').map(n => parseInt(n.trim()));
+            const min = parts[0];
+            const max = parts[1] || min;
+            matchesPlayer = (targetPlayer >= min && targetPlayer <= max);
+          } else {
+            matchesPlayer = (parseInt(game.players) === targetPlayer);
+          }
+        }
+
+        // 3. 소요시간 직접 입력 매칭 (입력한 시간 이하인 게임 검색)
+        let matchesTime = true;
+        if (maxTime !== null && game.play_time) {
+          const gameTime = parseInt(game.play_time);
+          matchesTime = (gameTime <= maxTime);
+        }
+
+        return matchesTitle && matchesPlayer && matchesTime;
+      });
+
+      renderList(filtered, 'searchResultList');
+    }
+
+    // 5. 상태 변경
+    function toggleCheck(gameId, isChecked) {
+      if (!userRecords[gameId]) userRecords[gameId] = { checked: false, memo: "" };
+      userRecords[gameId].checked = isChecked;
+      renderAll();
+    }
+
+    function updateMemo(gameId, memoText) {
+      if (!userRecords[gameId]) userRecords[gameId] = { checked: true, memo: "" };
+      userRecords[gameId].memo = memoText.trim();
+    }
+
+     // 6. 새 게임 등록 (GM 닉네임 유효성 검사 추가)
+    async function addNewGame() {
+      const title = document.getElementById('newTitle').value.trim();
+      const play_time = document.getElementById('newTime').value.trim();
+      const players = document.getElementById('newPlayers').value.trim();
+      const gm_input = document.getElementById('newGm').value.trim();
+      const img_url = document.getElementById('newImg').value.trim();
+
+      if (!title) {
+        alert("게임 이름을 입력해주세요.");
+        return;
+      }
+
+      if (!/^\d+$/.test(play_time)) {
+        alert("소요시간은 분 단위 숫자만 입력해주세요. (예: 30, 60, 180)");
+        return;
+      }
+
+      if (!/^\d+(\s*~\s*\d+)?$/.test(players)) {
+        alert("인원수는 '4' 또는 '4~5'와 같은 형식으로 입력해주세요.");
+        return;
+      }
+
+      if (!gm_input) {
+        alert("담당 GM 닉네임을 최소 1명 이상 입력해주세요.");
+        return;
+      }
+
+      if (!db) {
+        alert("Supabase 키를 먼저 연결해주세요.");
+        return;
+      }
+
+      // 쉼표(,)를 기준으로 쪼개고 앞뒤 공백 제거
+      const gmList = gm_input.split(',').map(name => name.trim()).filter(name => name.length > 0);
+
+      // 입력된 모든 GM 닉네임이 users 테이블에 존재하는지 확인
+      const { data: foundUsers, error: gmCheckError } = await db
+        .from('users')
+        .select('nickname')
+        .in('nickname', gmList);
+
+      const foundNicknames = foundUsers ? foundUsers.map(u => u.nickname) : [];
+      const missingUsers = gmList.filter(name => !foundNicknames.includes(name));
+
+      if (missingUsers.length > 0) {
+        alert(`다음 GM은 등록되지 않은 유저입니다: [ ${missingUsers.join(', ')} ]\nusers 테이블에 존재하는 닉네임을 정확히 입력해주세요.`);
+        return;
+      }
+
+      // DB에 쉼표로 깔끔하게 정돈해서 저장 (예: "민수, 영희")
+      const cleanGmNames = gmList.join(', ');
+
+      const { error } = await db.from('games').insert([
+        { 
+          title, 
+          play_time, 
+          players: players.replace(/\s+/g, ''), 
+          gm_name: cleanGmNames, 
+          img_url 
+        }
+      ]);
+
+      if (error) {
+        alert("게임 등록 실패: " + error.message);
+      } else {
+        alert(`'${title}' 게임이 등록되었습니다! (담당 GM: ${cleanGmNames})`);
+        clearAddForm();
+        await fetchGames();
+        switchTab('list');
+      }
+    }
+
+function clearAddForm() {
+  document.getElementById('newTitle').value = '';
+  document.getElementById('newTime').value = '';
+  document.getElementById('newPlayers').value = '';
+  document.getElementById('newGm').value = '';
+  document.getElementById('newImg').value = '';
+}
+    
+    // 권한에 따라 게임 등록 탭을 보이거나 숨기는 함수
+    function updateRoleUI(role) {
+      const addTabBtn = document.getElementById('tab-btn-add');
+      if (role === 'gm' || role === 'admin') {
+        addTabBtn.style.display = 'block';
+      } else {
+        addTabBtn.style.display = 'none';
+      }
+    }
+
+    // 8. 탭 전환
+    function switchTab(tabName) {
+      const tabs = ['search', 'list', 'my', 'add'];
+      const buttons = document.querySelectorAll('.tab-btn');
+      
+      tabs.forEach((t, index) => {
+        const content = document.getElementById(`tab-${t}`);
+        if (t === tabName) {
+          content.classList.add('active');
+          buttons[index].classList.add('active');
+        } else {
+          content.classList.remove('active');
+          buttons[index].classList.remove('active');
+        }
+      });
+
+      if (tabName === 'my') renderMyGames();
+    }
+
+    window.onload = function() {
+      fetchGames();
+    };
+  </script>
+</body>
+</html>
