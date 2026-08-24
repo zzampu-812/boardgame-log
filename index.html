@@ -109,6 +109,22 @@
   font-size: 11px;
 }
 
+/* 모바일 화면 최적화 (가로 폭 480px 이하) */
+@media (max-width: 480px) {
+  .input-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .input-row input {
+    width: 100%;
+    min-width: 0;
+  }
+  .btn-group {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
   </style>
 </head>
 <body>
