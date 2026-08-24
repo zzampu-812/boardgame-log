@@ -298,9 +298,16 @@
     function createCardHTML(game) {
       const record = userRecords[game.id] || { checked: false, memo: "" };
       const defaultImg = "https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?w=150";
-      const timeBadge = game.play_time ? `<span class="badge badge-time">⏱ ${game.play_time}</span>` : '';
-      const playerBadge = game.players ? `<span class="badge badge-players">👥 ${game.players}</span>` : '';
-      const gmBadge = game.gm_name ? `<span class="badge badge-gm">👑 GM: ${game.gm_name}</span>` : '';
+      
+      const formattedTime = game.play_time ? `${game.play_time}m+` : '';
+      const formattedPlayers = game.players ? `${game.players}인` : '';
+
+      const timeBadge = formattedTime ? `<span class="badge badge-time">⏱ ${formattedTime}</span>` : '';
+      const playerBadge = formattedPlayers ? `<span class="badge badge-players">👥 ${formattedPlayers}</span>` : '';
+
+      // [수정] 로그인한 유저가 GM 또는 admin일 때만 GM 뱃지 노출
+      const isStaff = currentUser && (currentUser.role === 'gm' || currentUser.role === 'admin');
+      const gmBadge = (isStaff && game.gm_name) ? `<span class="badge badge-gm">👑 GM: ${game.gm_name}</span>` : '';
 
       return `
         <div class="game-card">
@@ -317,7 +324,7 @@
                 <input type="checkbox" onchange="toggleCheck(${game.id}, this.checked)" ${record.checked ? 'checked' : ''}>
                 플레이 완료
               </label>
-              <input type="text" class="memo-input" maxlength="20" placeholder="개인메모 (20자 이내)" 
+              <input type="text" class="memo-input" maxlength="20" placeholder="메모 (20자 이내)" 
                 value="${record.memo}" 
                 ${record.checked ? '' : 'disabled'}
                 onchange="updateMemo(${game.id}, this.value)">
