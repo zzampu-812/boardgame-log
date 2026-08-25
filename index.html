@@ -228,13 +228,22 @@
 
   <!-- 탭 1: 게임 찾기 -->
   <div id="tab-search" class="tab-content active">
-  <input type="text" class="search-box" id="searchInput" placeholder="게임 이름 검색..." oninput="handleSearch()">
-  <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-    <input type="number" class="search-box" id="playerFilter" placeholder="👥 인원수 (예: 4)" style="margin-bottom:0;" oninput="handleSearch()">
-    <input type="number" class="search-box" id="timeFilter" placeholder="⏱ 최대 분 (예: 60)" style="margin-bottom:0;" oninput="handleSearch()">
+    <input type="text" class="search-box" id="searchInput" placeholder="게임 이름 검색..." oninput="handleSearch()">
+    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+      <input type="number" class="search-box" id="playerFilter" placeholder="👥 인원수 (예: 4)" style="margin-bottom:0;" oninput="handleSearch()">
+      <input type="number" class="search-box" id="timeFilter" placeholder="⏱ 최대 분 (예: 60)" style="margin-bottom:0;" oninput="handleSearch()">
+    </div>
+    
+    <!-- [추가] GM/관리자 전용 찜 인기순 필터 -->
+    <div id="gmWishFilterBox" style="display: none; margin-bottom: 16px; padding: 10px 12px; background: #fefce8; border: 1px solid #fef08a; border-radius: 8px;">
+      <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: bold; color: #854d0e; cursor: pointer;">
+        <input type="checkbox" id="wishOnlyFilter" onchange="handleSearch()">
+        ⭐️ 하고싶어요 등록된 게임만 모아보기 (인기순 정렬)
+      </label>
+    </div>
+
+    <div class="game-grid" id="searchResultList"></div>
   </div>
-  <div class="game-grid" id="searchResultList"></div>
-</div>
 
   <!-- 탭 2: 게임 목록 보기 -->
   <div id="tab-list" class="tab-content">
@@ -317,6 +326,20 @@
       }
 
       renderAll();
+    }
+
+    // 권한에 따라 게임 등록 탭 및 GM 전용 필터를 보이거나 숨기는 함수
+    function updateRoleUI(role) {
+      const addTabBtn = document.getElementById('tab-btn-add');
+      const wishFilterBox = document.getElementById('gmWishFilterBox');
+
+      if (role === 'gm' || role === 'admin') {
+        if (addTabBtn) addTabBtn.style.display = 'block';
+        if (wishFilterBox) wishFilterBox.style.display = 'block';
+      } else {
+        if (addTabBtn) addTabBtn.style.display = 'none';
+        if (wishFilterBox) wishFilterBox.style.display = 'none';
+      }
     }
 
 
@@ -632,9 +655,11 @@
       const keyword = document.getElementById('searchInput').value.replace(/\s+/g, '').toLowerCase();
       const playerInput = document.getElementById('playerFilter').value.trim();
       const timeInput = document.getElementById('timeFilter').value.trim();
+      const wishOnlyEl = document.getElementById('wishOnlyFilter');
+      const isWishOnly = wishOnlyEl ? wishOnlyEl.checked : false;
 
-      // 아무 조건도 없을 때는 검색 개수 표시 초기화
-      if (!keyword && !playerInput && !timeInput) {
+      // 아무 조건도 없고 찜 모아보기도 꺼져 있을 때는 안내 출력
+      if (!keyword && !playerInput && !timeInput && !isWishOnly) {
         document.getElementById('count-search').innerText = '';
         document.getElementById('searchResultList').innerHTML = '<div class="empty-state">게임 이름, 인원수 또는 소요시간을 입력해 검색해주세요.</div>';
         return;
@@ -643,10 +668,18 @@
       const targetPlayer = playerInput ? parseInt(playerInput) : null;
       const maxTime = timeInput ? parseInt(timeInput) : null;
 
-      const filtered = gamesList.filter(game => {
+      let filtered = gamesList.filter(game => {
+        // 1. 찜 모아보기 켜졌을 때 찜 개수 0개인 게임 제외
+        if (isWishOnly) {
+          const wishCount = (allGameWishes[game.id] || []).length;
+          if (wishCount === 0) return false;
+        }
+
+        // 2. 제목 검색
         const cleanTitle = game.title.replace(/\s+/g, '').toLowerCase();
         const matchesTitle = keyword ? cleanTitle.includes(keyword) : true;
 
+        // 3. 인원수 매칭
         let matchesPlayer = true;
         if (targetPlayer !== null && game.players) {
           if (game.players.includes('~')) {
@@ -659,6 +692,7 @@
           }
         }
 
+        // 4. 소요시간 매칭
         let matchesTime = true;
         if (maxTime !== null && game.play_time) {
           const gameTime = parseInt(game.play_time);
@@ -668,7 +702,18 @@
         return matchesTitle && matchesPlayer && matchesTime;
       });
 
-      // 검색된 게임 개수 표시
+      // [핵심] 찜 모아보기 상태일 때는 찜 인원수 많은 순서로 정렬 (인원수 같으면 최신 등록순)
+      if (isWishOnly) {
+        filtered.sort((a, b) => {
+          const countA = (allGameWishes[a.id] || []).length;
+          const countB = (allGameWishes[b.id] || []).length;
+          if (countB !== countA) {
+            return countB - countA; // 찜 인원 내림차순
+          }
+          return b.id - a.id;
+        });
+      }
+
       document.getElementById('count-search').innerText = `(${filtered.length})`;
       renderList(filtered, 'searchResultList');
     }
