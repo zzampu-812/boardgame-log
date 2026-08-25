@@ -368,7 +368,10 @@
       }
 
       // 2) GM/관리자 전용: 전체 유저 찜 목록 및 플레이 목록 동기화 (날짜별 그룹화)
-      if (currentUser.role === 'gm' || currentUser.role === 'admin') {
+      const userRole = (currentUser.role || '').toLowerCase().trim();
+      const isStaffUser = (userRole === 'gm' || userRole === 'admin');
+
+      if (isStaffUser) {
         // 전체 찜(하고 싶다) 목록 조회
         const { data: allWishRecords } = await db.from('records').select('game_id, nickname').eq('is_wish', true);
         allGameWishes = {};
@@ -381,33 +384,40 @@
           });
         }
 
-        // 전체 플레이 완료 유저 목록 조회
-        const { data: allRecords } = await db.from('records').select('game_id, nickname, is_checked, is_wish, play_date');
+        // 전체 플레이 완료 유저 목록 조회 (조건 단순화 및 완전 보완)
+        const { data: allRecords } = await db.from('records').select('*');
         allGamePlayers = {};
         if (allRecords) {
-          // 게임 ID별 -> 날짜별 유저 맵: { game_id: { '08-25': ['상구', '민수'], 'none': ['영희'] } }
           const groupMap = {};
 
           allRecords.forEach(row => {
+            // [핵심] is_checked가 true이거나, 찜(is_wish)이 아닌 행은 모두 플레이한 유저로 인정
             const isPlayed = (row.is_checked === true) || (row.is_wish !== true);
-            if (isPlayed) {
-              if (!groupMap[row.game_id]) groupMap[row.game_id] = {};
+            
+            if (isPlayed && row.nickname) {
+              const gId = parseInt(row.game_id);
+              if (!groupMap[gId]) groupMap[gId] = {};
               
-              const dateKey = row.play_date ? row.play_date.slice(5) : 'none';
-              if (!groupMap[row.game_id][dateKey]) groupMap[row.game_id][dateKey] = [];
-              if (!groupMap[row.game_id][dateKey].includes(row.nickname)) {
-                groupMap[row.game_id][dateKey].push(row.nickname);
+              // 날짜 처리 (play_date가 있으면 MM-DD, 없으면 none)
+              let dateKey = 'none';
+              if (row.play_date && typeof row.play_date === 'string' && row.play_date.trim() !== '') {
+                dateKey = row.play_date.slice(5, 10);
+              }
+
+              if (!groupMap[gId][dateKey]) groupMap[gId][dateKey] = [];
+              if (!groupMap[gId][dateKey].includes(row.nickname)) {
+                groupMap[gId][dateKey].push(row.nickname);
               }
             }
           });
 
-          // 날짜별로 묶어서 태그 문자열 생성
+          // 날짜 그룹별 문자열 태그 생성
           for (const gId in groupMap) {
             allGamePlayers[gId] = [];
             for (const dKey in groupMap[gId]) {
               const users = groupMap[gId][dKey].join(', ');
               if (dKey === 'none') {
-                allGamePlayers[gId].push(`${users}`);
+                allGamePlayers[gId].push(`👤 ${users}`);
               } else {
                 allGamePlayers[gId].push(`📅 ${dKey} : ${users}`);
               }
@@ -576,7 +586,7 @@
        6. 카드 UI 생성 및 화면 렌더링
        ========================================================================== */
     function createCardHTML(game) {
-      const record = userRecords[game.id] || { checked: false, memo: "" };
+      const record = userRecords[game.id] || { checked: false, memo: "", play_date: "" };
       const isWished = userWishes.includes(game.id);
       const defaultImg = "https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?w=150";
       
@@ -586,12 +596,14 @@
       const timeBadge = formattedTime ? `<span class="badge badge-time">⏱ ${formattedTime}</span>` : '';
       const playerBadge = formattedPlayers ? `<span class="badge badge-players">👥 ${formattedPlayers}</span>` : '';
 
-      const isStaff = currentUser && (currentUser.role === 'gm' || currentUser.role === 'admin');
+      // [핵심] GM이나 관리자라면 모든 게임에서 명단 박스 및 GM 배지 노출
+      const userRole = (currentUser && currentUser.role) ? currentUser.role.toLowerCase().trim() : '';
+      const isStaff = (userRole === 'gm' || userRole === 'admin');
       const gmBadge = (isStaff && game.gm_name) ? `<span class="badge badge-gm">👑 GM: ${game.gm_name}</span>` : '';
 
-      // 담당 GM 또는 관리자일 때 수정 권한 부여
+      // [수정 권한] 관리자이거나, 해당 게임의 담당 GM 목록에 내 닉네임이 있을 때만 수정 버튼 노출
       const gmList = (game.gm_name || "").split(',').map(s => s.trim());
-      const canEdit = currentUser && (currentUser.role === 'admin' || gmList.includes(currentUser.nickname));
+      const canEdit = currentUser && (userRole === 'admin' || (userRole === 'gm' && gmList.includes(currentUser.nickname)));
       const editBtn = canEdit ? `<button onclick="startEditGame(${game.id})" class="btn-edit" style="font-size: 11px; padding: 4px 6px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; color: #475569; white-space: nowrap;">✏️ 수정</button>` : '';
 
       // [GM/관리자 전용] ⭐️ 하고 싶어요 명단 박스
