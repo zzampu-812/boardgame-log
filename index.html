@@ -368,14 +368,14 @@
       allGameWishes = {};
     }
 
-   // 2. 본인의 기록(플레이 체크, 메모, 찜 목록) 가져오기 (과거 데이터 호환 보완)
+   // 2. 본인의 기록(플레이 체크, 메모, 찜 목록) 가져오기 (기존 데이터 완벽 복구 조건)
     const { data: recordsData } = await db.from('records').select('*').eq('nickname', nick);
     userRecords = {};
     userWishes = [];
     if (recordsData) {
       recordsData.forEach(row => {
-        // 새로 추가된 is_checked가 true이거나, 컬럼 추가 전 옛날 데이터(is_wish가 아닌 행)인 경우 플레이 완료로 처리
-        if (row.is_checked === true || (!row.is_wish && row.is_checked !== false)) {
+        // 찜(is_wish) 데이터가 아니거나 is_checked가 true이면 무조건 플레이 완료로 복구
+        if (row.is_checked === true || row.is_wish !== true) {
           userRecords[row.game_id] = { checked: true, memo: row.memo || "" };
         }
         if (row.is_wish === true) {
@@ -384,10 +384,9 @@
       });
     }
 
-    // [누락된 부분 추가]
     isLoaded = true;
     renderAll();
-  } // loadUserRecords 함수 종료
+  }
 
 
    // 2. 플레이 체크 및 메모 저장 함수 (플레이 체크 + 찜 목록 통합 저장)
