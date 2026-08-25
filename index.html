@@ -111,6 +111,9 @@
 
 /* 모바일 화면 최적화 (가로 폭 480px 이하) */
 @media (max-width: 480px) {
+  body {
+    padding: 10px;
+  }
   .input-row {
     flex-direction: column;
     gap: 8px;
@@ -122,6 +125,29 @@
   .btn-group {
     flex-direction: column;
     gap: 8px;
+  }
+  
+  /* 상단 탭 텍스트 줄바꿈 및 크기 최적화 */
+  .tab-btn {
+    font-size: 11px;
+    padding: 8px 1px;
+    white-space: normal;
+    line-height: 1.2;
+  }
+
+  /* 게임 카드 헤더 영역 모바일 최적화 */
+  .game-card-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .game-card-btn-group {
+    align-self: flex-start;
+    flex-wrap: wrap;
+  }
+  .btn-wish, .btn-edit {
+    white-space: nowrap; /* 글자가 세로로 쪼개지는 것 방지 */
   }
 }
 
@@ -352,41 +378,59 @@
       }
 
       
-      // 1. GM/Admin용 전체 희망 유저 목록 조회
-    if (currentUser.role === 'gm' || currentUser.role === 'admin') {
-      const { data: allWishRecords } = await db.from('records').select('game_id, nickname').eq('is_wish', true);
-      allGameWishes = {};
-      if (allWishRecords) {
-        allWishRecords.forEach(row => {
-          if (!allGameWishes[row.game_id]) allGameWishes[row.game_id] = [];
-          if (!allGameWishes[row.game_id].includes(row.nickname)) {
-            allGameWishes[row.game_id].push(row.nickname);
+      // 1. GM/Admin용 전체 희망 유저(찜) 목록 조회
+      if (currentUser.role === 'gm' || currentUser.role === 'admin') {
+        const { data: allWishRecords } = await db.from('records').select('game_id, nickname').eq('is_wish', true);
+        allGameWishes = {};
+        if (allWishRecords) {
+          allWishRecords.forEach(row => {
+            if (!allGameWishes[row.game_id]) allGameWishes[row.game_id] = [];
+            if (!allGameWishes[row.game_id].includes(row.nickname)) {
+              allGameWishes[row.game_id].push(row.nickname);
+            }
+          });
+        }
+
+        // [수정] 플레이 완료 유저 목록 조회 (과거 데이터 호환 + 찜 데이터 제외)
+        const { data: allRecords } = await db.from('records').select('game_id, nickname, is_checked, is_wish');
+        allGamePlayers = {};
+        if (allRecords) {
+          allRecords.forEach(row => {
+            // is_checked가 true이거나, 찜(is_wish)이 아닌 기존 과거 데이터인 경우 플레이어로 등록
+            const isPlayed = (row.is_checked === true) || (row.is_wish !== true);
+            if (isPlayed) {
+              if (!allGamePlayers[row.game_id]) {
+                allGamePlayers[row.game_id] = [];
+              }
+              if (!allGamePlayers[row.game_id].includes(row.nickname)) {
+                allGamePlayers[row.game_id].push(row.nickname);
+              }
+            }
+          });
+        }
+      } else {
+        allGameWishes = {};
+        allGamePlayers = {};
+      }
+
+      // 2. 본인의 기록(플레이 체크, 메모, 찜 목록) 가져오기 (과거 데이터 완벽 호환)
+      const { data: recordsData } = await db.from('records').select('*').eq('nickname', nick);
+      userRecords = {};
+      userWishes = [];
+      if (recordsData) {
+        recordsData.forEach(row => {
+          if (row.is_checked === true || row.is_wish !== true) {
+            userRecords[row.game_id] = { checked: true, memo: row.memo || "" };
+          }
+          if (row.is_wish === true) {
+            userWishes.push(row.game_id);
           }
         });
       }
-    } else {
-      allGameWishes = {};
-    }
 
-   // 2. 본인의 기록(플레이 체크, 메모, 찜 목록) 가져오기 (기존 데이터 완벽 복구 조건)
-    const { data: recordsData } = await db.from('records').select('*').eq('nickname', nick);
-    userRecords = {};
-    userWishes = [];
-    if (recordsData) {
-      recordsData.forEach(row => {
-        // 찜(is_wish) 데이터가 아니거나 is_checked가 true이면 무조건 플레이 완료로 복구
-        if (row.is_checked === true || row.is_wish !== true) {
-          userRecords[row.game_id] = { checked: true, memo: row.memo || "" };
-        }
-        if (row.is_wish === true) {
-          userWishes.push(row.game_id);
-        }
-      });
-    }
-
-    isLoaded = true;
-    renderAll();
-  }
+      isLoaded = true;
+      renderAll();
+    } // loadUserRecords 종료
 
 
    // 2. 플레이 체크 및 메모 저장 함수 (플레이 체크 + 찜 목록 통합 저장)
@@ -479,7 +523,8 @@
       // 내가 담당 GM이거나 관리자일 때 수정 권한 부여
       const gmList = (game.gm_name || "").split(',').map(s => s.trim());
       const canEdit = currentUser && (currentUser.role === 'admin' || gmList.includes(currentUser.nickname));
-      const editBtn = canEdit ? `<button onclick="startEditGame(${game.id})" style="font-size: 11px; padding: 2px 6px; border: 1px solid #cbd5e1; background: #fff; border-radius: 4px; cursor: pointer; color: #475569;">✏️ 수정</button>` : '';
+      const editBtn = canEdit ? `<button onclick="startEditGame(${game.id})" class="btn-edit" style="font-size: 11px; padding: 4px 6px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; color: #475569; white-space: nowrap;">✏️ 수정</button>` : '';
+
 
       // [GM/관리자 전용] ⭐️ 이 게임을 찜한 유저 명단 박스
       let wishUsersHTML = '';
@@ -521,9 +566,10 @@
         <div class="game-card">
           <img class="game-thumb" src="${game.img_url || defaultImg}" loading="lazy" alt="${game.title}" onerror="this.src='${defaultImg}'">
           <div class="game-info">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-              <div class="game-title">${game.title}</div>
-              <div style="display: flex; gap: 4px;">
+            <!-- [수정] 모바일 대응 헤더 구조 -->
+            <div class="game-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;">
+              <div class="game-title" style="word-break: keep-all;">${game.title}</div>
+              <div class="game-card-btn-group" style="display: flex; gap: 4px; flex-shrink: 0;">
                 <button class="btn-wish ${isWished ? 'active' : ''}" onclick="toggleWish(${game.id})">
                   ${isWished ? '⭐️ 하고싶다' : '☆ 하고싶다'}
                 </button>
