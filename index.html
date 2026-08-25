@@ -564,9 +564,11 @@
       userRecords[gameId].memo = memoText.trim();
     }
 
-    // 플레이 날짜 수정
+    // 플레이 날짜 수정 (선택 시 화면 전환 없이 값만 안전하게 저장)
     function updatePlayDate(gameId, dateValue) {
-      if (!userRecords[gameId]) userRecords[gameId] = { checked: true, memo: "", play_date: "" };
+      if (!userRecords[gameId]) {
+        userRecords[gameId] = { checked: false, memo: "", play_date: "" };
+      }
       userRecords[gameId].play_date = dateValue;
     }
 
@@ -652,9 +654,9 @@
                   <input type="checkbox" onchange="toggleCheck(${game.id}, this.checked)" ${record.checked ? 'checked' : ''}>
                   플레이 완료
                 </label>
-                <!-- 플레이 완료 체크 시에만 나타나는 날짜 선택창 -->
+                <!-- 체크 전/후 상관없이 항상 보이는 날짜 선택창 -->
                 <input type="date" value="${record.play_date || ''}" 
-                  style="padding: 3px 6px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 11px; color: #475569; ${record.checked ? '' : 'display: none;'}"
+                  style="padding: 3px 6px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 11px; color: #475569;"
                   onchange="updatePlayDate(${game.id}, this.value)">
               </div>
               <input type="text" class="memo-input" maxlength="20" placeholder="메모 (20자 이내)" 
