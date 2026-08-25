@@ -384,34 +384,42 @@
           });
         }
 
-        // 전체 플레이 완료 유저 목록 조회 (조건 단순화 및 완전 보완)
-        const { data: allRecords } = await db.from('records').select('*');
+        // 전체 플레이 완료 유저 목록 조회 (디버깅 로그 포함)
+        const { data: allRecords, error: fetchErr } = await db.from('records').select('*').limit(5000);
+        console.log("1. DB에서 가져온 전체 행 개수:", allRecords ? allRecords.length : 0);
+        if (fetchErr) console.error("조회 에러:", fetchErr);
+
         allGamePlayers = {};
         if (allRecords) {
           const groupMap = {};
 
-          allRecords.forEach(row => {
-            // [핵심] is_checked가 true이거나, 찜(is_wish)이 아닌 행은 모두 플레이한 유저로 인정
-            const isPlayed = (row.is_checked === true) || (row.is_wish !== true);
-            
-            if (isPlayed && row.nickname) {
+          allRecords.forEach((row, idx) => {
+            const cleanNick = (row.nickname || '').trim();
+            if (!cleanNick) return;
+
+            // 특정 유저 데이터 추적용 콘솔 출력 (궁금한 유저 닉네임으로 자동 매칭)
+            // 브라우저 Console에서 이 로그를 확인합니다.
+            const isWishOnly = (row.is_wish === true && row.is_checked !== true);
+            const isPlayed = !isWishOnly;
+
+            console.log(`[행 ${idx}] 유저: ${cleanNick} | 게임ID: ${row.game_id} | is_checked: ${row.is_checked} | is_wish: ${row.is_wish} | 판정: ${isPlayed ? '플레이' : '찜/제외'}`);
+
+            if (isPlayed) {
               const gId = parseInt(row.game_id);
               if (!groupMap[gId]) groupMap[gId] = {};
               
-              // 날짜 처리 (play_date가 있으면 MM-DD, 없으면 none)
               let dateKey = 'none';
               if (row.play_date && typeof row.play_date === 'string' && row.play_date.trim() !== '') {
                 dateKey = row.play_date.slice(5, 10);
               }
 
               if (!groupMap[gId][dateKey]) groupMap[gId][dateKey] = [];
-              if (!groupMap[gId][dateKey].includes(row.nickname)) {
-                groupMap[gId][dateKey].push(row.nickname);
+              if (!groupMap[gId][dateKey].includes(cleanNick)) {
+                groupMap[gId][dateKey].push(cleanNick);
               }
             }
           });
 
-          // 날짜 그룹별 문자열 태그 생성
           for (const gId in groupMap) {
             allGamePlayers[gId] = [];
             for (const dKey in groupMap[gId]) {
@@ -424,6 +432,7 @@
             }
           }
         }
+        console.log("2. 최종 생성된 allGamePlayers:", allGamePlayers);
       } else {
         allGameWishes = {};
         allGamePlayers = {};
@@ -456,7 +465,7 @@
 
 
     /* ==========================================================================
-       4. 사용자 기록 저장 (안전장치 2종 포함)
+       4. 사용자 기록 저장 (안전 트랜잭션 방식)
        ========================================================================== */
     async function saveUserRecords() {
       const nick = document.getElementById('nickname').value.trim();
@@ -465,48 +474,47 @@
       if (!nick || !pw) return alert("닉네임과 비밀번호를 모두 입력해주세요.");
       if (!db) return alert("Supabase 키를 먼저 연결해주세요.");
 
-      // [안전장치 1] 기록 불러오기(동기화)를 먼저 수행했는지 검사
+      // [안전장치 1] 동기화 검사
       if (!isLoaded || !currentUser || currentUser.nickname !== nick) {
         return alert("먼저 [기록 불러오기]를 눌러 기존 기록을 정상적으로 동기화한 후 저장해주세요.");
       }
 
-      // 저장할 데이터 맵 구성
-      const saveMap = {};
+      // 저장할 데이터 배열 구성
+      const rowsToInsert = [];
       let checkedCount = 0;
 
-      // 1)플레이 체크 및 메모, 날짜 수집
+      // 1) 플레이 체크 및 메모, 날짜 수집
       for (const gameId in userRecords) {
         if (userRecords[gameId].checked) {
           checkedCount++;
-          saveMap[gameId] = {
+          rowsToInsert.push({
             nickname: nick,
             password: pw,
             game_id: parseInt(gameId),
             memo: userRecords[gameId].memo || "",
-            play_date: userRecords[gameId].play_date || null, // 빈 값이면 null 저장
+            play_date: userRecords[gameId].play_date || null,
             is_checked: true,
-            is_wish: false
-          };
+            is_wish: userWishes.includes(parseInt(gameId)) // 찜도 함께 체크된 경우 반영
+          });
         }
       }
 
-      // 2) 하고 싶다(찜) 데이터 병합
+      // 2) 플레이는 안 했지만 찜(하고 싶다)만 한 항목 추가
       userWishes.forEach(gameId => {
-        if (saveMap[gameId]) {
-          saveMap[gameId].is_wish = true;
-        } else {
-          saveMap[gameId] = {
+        const parsedId = parseInt(gameId);
+        const alreadyAdded = rowsToInsert.some(r => r.game_id === parsedId);
+        if (!alreadyAdded) {
+          rowsToInsert.push({
             nickname: nick,
             password: pw,
-            game_id: parseInt(gameId),
+            game_id: parsedId,
             memo: "",
+            play_date: null,
             is_checked: false,
             is_wish: true
-          };
+          });
         }
       });
-
-      const rowsToInsert = Object.values(saveMap);
 
       // [안전장치 2] 체크와 찜이 '둘 다 0개'일 때만 삭제 위험 경고창 노출
       if (checkedCount === 0 && userWishes.length === 0) {
@@ -514,7 +522,7 @@
         if (!confirmClear) return;
       }
 
-      // 기존 기록 삭제 후 재등록
+      // 3) 기존 기록 삭제 후 새 데이터 저장
       const { error: delError } = await db.from('records').delete().eq('nickname', nick).eq('password', pw);
       if (delError) {
         return alert("기존 기록 갱신 준비 중 오류가 발생했습니다: " + delError.message);
@@ -522,10 +530,12 @@
 
       if (rowsToInsert.length > 0) {
         const { error: insertError } = await db.from('records').insert(rowsToInsert);
-        if (insertError) return alert("저장 중 오류 발생: " + insertError.message);
+        if (insertError) {
+          return alert("저장 중 오류가 발생했습니다: " + insertError.message);
+        }
       }
 
-      alert(`[${nick}]님의 기록이 저장되었습니다!\n(플레이 완료: ${checkedCount}개 / 하고 싶다: ${userWishes.length}개)`);
+      alert(`[${nick}]님의 기록이 안전하게 저장되었습니다!\n(플레이 완료: ${checkedCount}개 / 하고 싶다: ${userWishes.length}개)`);
     }
 
 
